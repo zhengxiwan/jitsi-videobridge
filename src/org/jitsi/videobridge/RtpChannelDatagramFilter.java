@@ -6,9 +6,9 @@
  */
 package org.jitsi.videobridge;
 
-import org.ice4j.socket.*;
-
 import java.net.*;
+
+import org.ice4j.socket.*;
 
 /**
  * Filters RTP or RTCP packet for a specific <tt>RtpChannel</tt>.
@@ -16,6 +16,13 @@ import java.net.*;
 class RtpChannelDatagramFilter
     implements DatagramPacketFilter
 {
+    /**
+     * The <tt>DatagramPacketFilter</tt> which accepts DTLS
+     * <tt>DatagramPacket</tt>s when {@link #acceptNonRtp} equals <tt>true</tt>.
+     */
+    private static final DatagramPacketFilter DTLS_DATAGRAM_FILTER
+        = new DTLSDatagramFilter();
+
     /**
      * The <tt>RtpChannel</tt> for which this <tt>RtpChannelDatagramFilter</tt>
      * works.
@@ -101,11 +108,9 @@ class RtpChannelDatagramFilter
                     return !rtcp && acceptRTP(pt & 0x7f);
                 }
             }
-            else
-                return acceptNonRtp;
         }
 
-        return acceptNonRtp;
+        return acceptNonRtp && DTLS_DATAGRAM_FILTER.accept(p);
     }
 
     /**
