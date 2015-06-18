@@ -17,12 +17,9 @@
 package org.jitsi.videobridge.transform;
 
 import net.sf.fmj.media.rtp.*;
-import net.sf.fmj.media.rtp.util.*;
-import org.jitsi.impl.neomedia.*;
-import org.jitsi.impl.neomedia.rtcp.*;
 import org.jitsi.impl.neomedia.transform.*;
-import org.jitsi.service.neomedia.*;
-import org.jitsi.util.*;
+import org.jitsi.impl.neomedia.transform.rtcp.*;
+import org.jitsi.service.neomedia.rtp.*;
 
 /**
  * A <tt>TransformEngine</tt> implementation which parses RTCP packets and
@@ -30,43 +27,32 @@ import org.jitsi.util.*;
  * This is similar to (and based on) <tt>libjitsi</tt>'s
  * <tt>RTCPTerminationTransformEngine</tt> but is not connected with a
  * <tt>MediaStream</tt>.
+ *
  * @author Boris Grozev
+ * @author George Politis
  */
 public class RTCPTransformEngine
-    extends SinglePacketTransformer
-    implements TransformEngine, Transformer<RTCPCompoundPacket>
+    extends SingleRTCPPacketTransformer
+    implements TransformEngine
 {
-    /**
-     * The <tt>Logger</tt> used by the <tt>RTCPTransformEngine</tt> class
-     * and its instances to print debug information.
-     */
-    private static final Logger logger
-            = Logger.getLogger(RTCPTransformEngine.class);
-
     /**
      * The chain of transformers that operate on <tt>RTCPCompoundPacket</tt>s
      * (already parsed).
      */
-    private Transformer<RTCPCompoundPacket>[] chain;
-
-    /**
-     * The instance used to parse the input <tt>RawPacket</tt>s/bytes into
-     * <tt>RTCPCompoundPacket</tt>s.
-     */
-    private final RTCPPacketParserEx parser = new RTCPPacketParserEx();
+    private RTCPPacketTransformer[] chain;
 
     /**
      * Initializes this transformer with the given chain of transformers.
      * @param chain
      */
-    public RTCPTransformEngine(Transformer<RTCPCompoundPacket>[] chain)
+    public RTCPTransformEngine(RTCPPacketTransformer[] chain)
     {
         this.chain = chain;
     }
 
     /**
      * Implements
-     * {@link org.jitsi.service.neomedia.Transformer#transform(Object)}.
+     * {@link org.jitsi.service.neomedia.rtp.RTCPPacketTransformer#transform(RTCPCompoundPacket)}.
      *
      * Does not touch outgoing packets.
      */
@@ -79,7 +65,7 @@ public class RTCPTransformEngine
 
     /**
      * Implements
-     * {@link org.jitsi.service.neomedia.Transformer#reverseTransform(Object)}.
+     * {@link org.jitsi.service.neomedia.rtp.RTCPPacketTransformer#reverseTransform(RTCPCompoundPacket)}.
      *
      * Transforms incoming RTCP packets through the configured transformer
      * chain.
@@ -90,7 +76,7 @@ public class RTCPTransformEngine
     {
         if (chain != null)
         {
-            for (Transformer<RTCPCompoundPacket> transformer : chain)
+            for (RTCPPacketTransformer transformer : chain)
             {
                 if (transformer != null)
                     inPacket = transformer.reverseTransform(inPacket);
@@ -102,7 +88,7 @@ public class RTCPTransformEngine
 
     /**
      * Implements
-     * {@link org.jitsi.service.neomedia.Transformer#close()}.
+     * {@link org.jitsi.service.neomedia.rtp.RTCPPacketTransformer#close()}.
      */
     @Override
     public void close()
@@ -127,64 +113,5 @@ public class RTCPTransformEngine
     public PacketTransformer getRTCPTransformer()
     {
         return this;
-    }
-
-    /**
-     * Implements
-     * {@link org.jitsi.impl.neomedia.transform.SinglePacketTransformer#transform(org.jitsi.impl.neomedia.RawPacket)}
-     *
-     * Does not touch outgoing packets.
-     */
-    @Override
-    public RawPacket transform(RawPacket packet)
-    {
-        // Not implemented.
-        return packet;
-    }
-
-    /**
-     * Implements
-     * {@link org.jitsi.impl.neomedia.transform.SinglePacketTransformer#reverseTransform(org.jitsi.impl.neomedia.RawPacket)}
-     *
-     * Parses the given packet as an RTCP packet and transforms the result
-     * using the configured transformer chain. Returns the <tt>RawPacket</tt>
-     * constructed from the transformed <tt>RTCPCompoundPacket</tt>.
-     */
-    @Override
-    public RawPacket reverseTransform(RawPacket pkt)
-    {
-        // Parse the RTCP packet.
-        RTCPCompoundPacket inRTCPPacket;
-        try
-        {
-            inRTCPPacket = (RTCPCompoundPacket) parser.parse(
-                    pkt.getBuffer(),
-                    pkt.getOffset(),
-                    pkt.getLength());
-        }
-        catch (BadFormatException e)
-        {
-            // TODO(gp) decide what to do with malformed packets!
-            logger.error("Could not parse RTCP packet.", e);
-            return pkt;
-        }
-
-        // Transform the RTCP packet with the transform chain.
-        RTCPCompoundPacket outRTCPPacket = reverseTransform(inRTCPPacket);
-
-        if (outRTCPPacket == null
-                || outRTCPPacket.packets == null
-                || outRTCPPacket.packets.length == 0)
-            return null;
-
-        // Assemble the RTCP packet.
-        int len = outRTCPPacket.calcLength();
-        outRTCPPacket.assemble(len, false);
-
-        pkt.setBuffer(outRTCPPacket.data);
-        pkt.setLength(outRTCPPacket.data.length);
-        pkt.setOffset(0);
-
-        return pkt;
     }
 }

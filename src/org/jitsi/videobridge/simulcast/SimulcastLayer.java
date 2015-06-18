@@ -24,11 +24,39 @@ import org.jitsi.util.event.*;
 
 /**
  * @author George Politis
+ *
+ * TODO move to libjitsi
  */
 public class SimulcastLayer
     extends PropertyChangeNotifier
         implements Comparable<SimulcastLayer>
 {
+    /**
+     * Base layer quality order.
+     */
+    public static final int SIMULCAST_LAYER_ORDER_LQ = 0;
+    /**
+     * The order when there's no override layer.
+     */
+    public static final int SIMULCAST_LAYER_ORDER_NO_OVERRIDE = -1;
+    /**
+     *
+     */
+    public static final String SIMULCAST_LAYERS_PROPERTY
+            = SimulcastSender.class.getName() + ".simulcastLayers";
+    /**
+     * Defines the simulcast substream to receive, if there is no other
+     */
+    protected static final int SIMULCAST_LAYER_ORDER_INIT
+            = SIMULCAST_LAYER_ORDER_LQ;
+    /**
+     * High quality layer order.
+     */
+    protected static final int SIMULCAST_LAYER_ORDER_HQ = 1;
+
+    /**
+     *
+     */
     private static final int MAX_SEEN_BASE = 25;
 
     /**
@@ -44,13 +72,6 @@ public class SimulcastLayer
      */
     private final RateStatistics rateStatistics
             = new RateStatistics(INCOMING_BITRATE_INTERVAL_MS, 8000F);
-
-    public SimulcastManager getSimulcastManager()
-    {
-        return simulcastManager;
-    }
-
-    private final SimulcastManager simulcastManager;
 
     /**
      * The <tt>Logger</tt> used by the <tt>SimulcastLayer</tt> class and its
@@ -79,9 +100,8 @@ public class SimulcastLayer
 
     private final int order;
 
-    public SimulcastLayer(SimulcastManager manager, long primarySSRC, int order)
+    public SimulcastLayer(long primarySSRC, int order)
     {
-        this.simulcastManager = manager;
         this.primarySSRC = primarySSRC;
         this.order = order;
     }
@@ -100,7 +120,6 @@ public class SimulcastLayer
         associatedSSRCs.addAll(ssrcs);
     }
 
-    @Override
     public int compareTo(SimulcastLayer o)
     {
         return order - o.order;
@@ -138,20 +157,17 @@ public class SimulcastLayer
 
                 if (logger.isDebugEnabled())
                 {
-                    Map<String, Object> map = new HashMap<String, Object>(2);
-                    map.put("parent", getSimulcastManager().getVideoChannel()
-                            .getEndpoint());
+                    Map<String, Object> map = new HashMap<String, Object>(1);
                     map.put("self", this);
                     StringCompiler sc = new StringCompiler(map);
 
-                    logger.debug(sc.c("{parent.id} stopped streaming its " +
-                            "order-{self.order} layer ({self.primarySSRC})."));
+                    logger.debug(sc.c("order-{self.order} layer " +
+                            "({self.primarySSRC}) stopped."));
                 }
 
                 // FIXME(gp) use an event dispatcher or a thread pool.
                 new Thread(new Runnable()
                 {
-                    @Override
                     public void run()
                     {
                         firePropertyChange(IS_STREAMING_PROPERTY, true, false);
@@ -176,20 +192,18 @@ public class SimulcastLayer
 
             if (logger.isDebugEnabled())
             {
-                Map<String, Object> map = new HashMap<String, Object>(2);
-                map.put("parent", getSimulcastManager().getVideoChannel()
-                        .getEndpoint());
+                Map<String, Object> map = new HashMap<String, Object>(1);
                 map.put("self", this);
                 StringCompiler sc = new StringCompiler(map);
 
-                logger.debug(sc.c("{parent.id} started streaming its " +
-                        "order-{self.order} layer ({self.primarySSRC})."));
+                logger.debug(sc.c("order-{self.order} layer " +
+                        "({self.primarySSRC}) resumed."));
             }
+
 
             // FIXME(gp) use an event dispatcher or a thread pool.
             new Thread(new Runnable()
             {
-                @Override
                 public void run()
                 {
                     firePropertyChange(IS_STREAMING_PROPERTY, false, true);
@@ -209,11 +223,8 @@ public class SimulcastLayer
         return rateStatistics.getRate(System.currentTimeMillis());
     }
 
-    public void acceptedDataInputStreamDatagramPacket(DatagramPacket p)
+    public void acceptedDataInputStreamDatagramPacket(int len)
     {
-        if (p != null)
-        {
-            rateStatistics.update(p.getLength(), System.currentTimeMillis());
-        }
+        rateStatistics.update(len, System.currentTimeMillis());
     }
 }

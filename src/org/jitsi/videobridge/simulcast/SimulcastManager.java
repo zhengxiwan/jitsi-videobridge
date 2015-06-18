@@ -15,67 +15,26 @@
  */
 package org.jitsi.videobridge.simulcast;
 
-import java.net.*;
 import java.util.*;
 
 import net.sf.fmj.media.rtp.*;
 
+import net.sf.fmj.media.rtp.util.*;
 import org.jitsi.impl.neomedia.rtp.translator.*;
-import org.jitsi.util.*;
-import org.jitsi.util.event.*;
 import org.jitsi.videobridge.*;
-import org.jitsi.videobridge.simulcast.messages.*;
 
 /**
  * The simulcast manager of a <tt>VideoChannel</tt>.
  *
- * TODO(gp) Add a SimulcastSender that will hold the SimulcastLayers.
- *
  * @author George Politis
  */
 public class SimulcastManager
-    extends PropertyChangeNotifier
 {
     /**
-     * The <tt>Logger</tt> used by the <tt>SimulcastManager</tt> class and its
-     * instances to print debug information.
-     */
-    private static final Logger logger
-        = Logger.getLogger(SimulcastManager.class);
-
-    private final static SimulcastMessagesMapper mapper
-        = new SimulcastMessagesMapper();
-
-    /**
-     * High quality layer order.
-     */
-    protected static final int SIMULCAST_LAYER_ORDER_HQ = 1;
-
-    /**
-     * Base layer quality order.
-     */
-    public static final int SIMULCAST_LAYER_ORDER_LQ = 0;
-
-    /**
-     * Defines the simulcast substream to receive, if there is no other
-     */
-    protected static final int SIMULCAST_LAYER_ORDER_INIT
-        = SIMULCAST_LAYER_ORDER_LQ;
-
-    /**
-     * The order when there's no override layer.
-     */
-    public static final int SIMULCAST_LAYER_ORDER_NO_OVERRIDE = -1;
-
-    protected static final String SIMULCAST_LAYERS_PROPERTY
-        = SimulcastManager.class.getName() + ".simulcastLayers";
-
-    /**
-     * The simulcast layers of this <tt>VideoChannel</tt>.
      *
-     * TODO(gp) Move to SimulcastSender
      */
-    private SortedSet<SimulcastLayer> simulcastLayers;
+    private BridgeSimulcastSender simulcastSender
+            = new BridgeSimulcastSender(this);
 
     /**
      * Associates sending endpoints to receiving simulcast layer. This simulcast
@@ -83,11 +42,11 @@ public class SimulcastManager
      * packet to its associated endpoint or not.  An entry in a this map will
      * automatically be removed when its key is no longer in ordinary use.
      *
-     * TODO(gp) must associate <tt>SimulcastSender</tt>s to
      * <tt>SimulcastReceiver</tt>s
      */
-    private final Map<SimulcastManager, SimulcastReceiver> simulcastReceivers
-        = new WeakHashMap<SimulcastManager, SimulcastReceiver>();
+    private final Map<BridgeSimulcastSender, BridgeSimulcastReceiver>
+            simulcastReceivers
+            = new WeakHashMap<BridgeSimulcastSender, BridgeSimulcastReceiver>();
 
     /**
      * The associated <tt>VideoChannel</tt> of this simulcast manager.
@@ -100,6 +59,27 @@ public class SimulcastManager
     }
 
     /**
+     *
+     * @return
+     */
+    public BridgeSimulcastSender getSimulcastSender()
+    {
+        return simulcastSender;
+    }
+
+    /**
+     * Determines whether the packet belongs to a simulcast substream that is
+     * being received by the <tt>Channel</tt> associated to this simulcast
+     * manager.
+     *
+     * @return
+     */
+    public boolean accept(RTPPacket pkt, BridgeSimulcastSender peerSM)
+    {
+        return pkt == null ? false : accept(pkt.ssrc & 0xffffl, peerSM);
+    }
+
+    /**
      * Determines whether the packet belongs to a simulcast substream that is
      * being received by the <tt>Channel</tt> associated to this simulcast
      * manager.
@@ -108,14 +88,11 @@ public class SimulcastManager
      */
     public boolean accept(
             byte[] buffer, int offset, int length,
-            VideoChannel peerVC)
+            BridgeSimulcastSender peerSM)
     {
-        SimulcastManager peerSM;
         boolean accept = true;
 
-        if (peerVC != null
-                && (peerSM = peerVC.getSimulcastManager()) != null
-                && peerSM.hasLayers())
+        if (peerSM != null && peerSM.hasLayers())
         {
             // FIXME(gp) inconsistent usage of longs and ints.
 
@@ -123,7 +100,7 @@ public class SimulcastManager
             long ssrc = readSSRC(buffer, offset, length) & 0xffffffffl;
 
             if (ssrc > 0)
-                accept = accept(ssrc, peerVC);
+                accept = accept(ssrc, peerSM);
         }
 
         return accept;
@@ -135,100 +112,22 @@ public class SimulcastManager
      * manager.
      *
      * @param ssrc
-     * @param peerVC
+     * @param peerSM
      * @return
      */
-    public boolean accept(long ssrc, VideoChannel peerVC)
+    public boolean accept(long ssrc, BridgeSimulcastSender peerSM)
     {
-        SimulcastManager peerSM;
         boolean accept = true;
 
-        if (ssrc > 0
-                && peerVC != null
-                && (peerSM = peerVC.getSimulcastManager()) != null
-                && peerSM.hasLayers())
+        if (ssrc > 0 && peerSM != null && peerSM.hasLayers())
         {
-            SimulcastReceiver sr = getOrCreateSimulcastReceiver(peerSM);
+            BridgeSimulcastReceiver sr = getOrCreateSimulcastReceiver(peerSM);
 
             if (sr != null)
                 accept = sr.accept(ssrc);
         }
 
         return accept;
-    }
-
-    /**
-     * Notifies this instance that a <tt>DatagramPacket</tt> packet received on
-     * the data <tt>DatagramSocket</tt> of this <tt>Channel</tt> has been
-     * accepted for further processing within Jitsi Videobridge.
-     *
-     * TODO(gp) Move to SimulcastSender.
-     *
-     * @param p the <tt>DatagramPacket</tt> received on the data
-     *          <tt>DatagramSocket</tt> of this <tt>Channel</tt>
-     */
-    public void acceptedDataInputStreamDatagramPacket(DatagramPacket p)
-    {
-        // With native simulcast we don't have a notification when a stream
-        // has started/stopped. The simulcast manager implements a timeout
-        // for the high quality stream and it needs to be notified when
-        // the channel has accepted a datagram packet for the timeout to
-        // function correctly.
-
-        if (hasLayers() && p != null)
-        {
-            int acceptedSSRC = readSSRC(p.getData(), p.getOffset(),
-                    p.getLength());
-
-            SortedSet<SimulcastLayer> layers = null;
-            SimulcastLayer acceptedLayer = null;
-
-            if (acceptedSSRC != 0)
-            {
-                layers = getSimulcastLayers();
-
-                // Find the accepted layer.
-                for (SimulcastLayer layer : layers)
-                {
-                    if ((int) layer.getPrimarySSRC() == acceptedSSRC)
-                    {
-                        acceptedLayer = layer;
-                        break;
-                    }
-                }
-            }
-
-            // If this is not an RTP packet or if we can't find an accepted
-            // layer, log and return as this situation makes no sense.
-            if (acceptedLayer == null)
-            {
-                return;
-            }
-
-            acceptedLayer.acceptedDataInputStreamDatagramPacket(p);
-
-            // NOTE(gp) we expect the base layer to be always on, so we never
-            // touch it or starve it.
-
-            if (acceptedLayer == layers.first())
-            {
-                // We have accepted a base layer packet, starve the higher
-                // quality layers.
-                for (SimulcastLayer layer : layers)
-                {
-                    if (acceptedLayer != layer)
-                    {
-                        layer.maybeTimeout();
-                    }
-                }
-            }
-            else
-            {
-                // We have accepted a non-base layer packet, touch the accepted
-                // layer.
-                acceptedLayer.touch();
-            }
-        }
     }
 
     /**
@@ -240,12 +139,12 @@ public class SimulcastManager
     {
         long bitrate = 0;
 
-        if (peerSM == null || !peerSM.hasLayers())
+        if (peerSM == null || !peerSM.getSimulcastSender().hasLayers())
         {
             return bitrate;
         }
 
-        SimulcastReceiver sr = getOrCreateSimulcastReceiver(peerSM);
+        BridgeSimulcastReceiver sr = getOrCreateSimulcastReceiver(peerSM.getSimulcastSender());
         if (sr != null)
         {
             bitrate = sr.getIncomingBitrate(noOverride);
@@ -258,28 +157,28 @@ public class SimulcastManager
      * Determines which simulcast layer from the srcVideoChannel is currently
      * being received by this video channel.
      *
-     * @param srcVideoChannel
+     * @param simulcastSender
      * @return
      */
-    private SimulcastReceiver getOrCreateSimulcastReceiver(
-            SimulcastManager peerSM)
+    public BridgeSimulcastReceiver getOrCreateSimulcastReceiver(
+            BridgeSimulcastSender simulcastSender)
     {
-        SimulcastReceiver sr = null;
+        BridgeSimulcastReceiver sr = null;
 
-        if (peerSM != null && peerSM.hasLayers())
+        if (simulcastSender != null && simulcastSender.hasLayers())
         {
             synchronized (simulcastReceivers)
             {
-                if (!simulcastReceivers.containsKey(peerSM))
+                if (!simulcastReceivers.containsKey(simulcastSender))
                 {
                     // Create a new receiver.
-                    sr = new SimulcastReceiver(this, peerSM);
-                    simulcastReceivers.put(peerSM, sr);
+                    sr = new BridgeSimulcastReceiver(this, simulcastSender);
+                    simulcastReceivers.put(simulcastSender, sr);
                 }
                 else
                 {
                     // Get the receiver that handles this peer simulcast manager
-                    sr = simulcastReceivers.get(peerSM);
+                    sr = simulcastReceivers.get(simulcastSender);
                 }
             }
         }
@@ -287,55 +186,9 @@ public class SimulcastManager
         return sr;
     }
 
-    protected SimulcastLayer getSimulcastLayer(int targetOrder)
-    {
-        SimulcastLayer next = null;
-
-        SortedSet<SimulcastLayer> layers = getSimulcastLayers();
-
-        if (layers != null && !layers.isEmpty())
-        {
-            Iterator<SimulcastLayer> it = layers.iterator();
-
-            int currentLayer = SimulcastManager.SIMULCAST_LAYER_ORDER_LQ;
-            while (it.hasNext()
-                    && currentLayer++ <= targetOrder)
-            {
-                next = it.next();
-            }
-        }
-
-        return next;
-    }
-
-    /**
-     * Gets the simulcast layers of this simulcast manager.
-     *
-     * @return
-     */
-    public SortedSet<SimulcastLayer> getSimulcastLayers()
-    {
-        SortedSet<SimulcastLayer> sl = simulcastLayers;
-        return
-                (sl == null)
-                        ? null
-                        : new TreeSet<SimulcastLayer>(sl);
-    }
-
     public VideoChannel getVideoChannel()
     {
         return videoChannel;
-    }
-
-    /**
-     * Returns true if the endpoint has signaled two or more simulcast layers.
-     *
-     * @return
-     */
-    public boolean hasLayers()
-    {
-        SortedSet<SimulcastLayer> sl = simulcastLayers;
-        return sl != null && sl.size() > 1;
     }
 
     public boolean override(int overrideOrder)
@@ -356,7 +209,7 @@ public class SimulcastManager
                         = new SimulcastReceiverOptions();
 
                     options.setOverrideOrder(overrideOrder);
-                    for (SimulcastReceiver sr : simulcastReceivers.values())
+                    for (BridgeSimulcastReceiver sr : simulcastReceivers.values())
                     {
                         sr.configure(options);
                     }
@@ -390,31 +243,5 @@ public class SimulcastManager
         return 0;
     }
 
-    public void setSimulcastLayers(SortedSet<SimulcastLayer> simulcastLayers)
-    {
 
-        this.simulcastLayers = simulcastLayers;
-
-        // FIXME(gp) use an event dispatcher or a thread pool.
-        new Thread(new Runnable()
-        {
-            @Override
-            public void run()
-            {
-                firePropertyChange(SIMULCAST_LAYERS_PROPERTY, null, null);
-            }
-        }).start();
-
-        if (logger.isDebugEnabled())
-        {
-            Map<String, Object> map = new HashMap<String, Object>(2);
-
-            map.put("self", videoChannel.getEndpoint());
-            map.put("simulcastLayers", mapper.toJson(simulcastLayers));
-
-            StringCompiler sc = new StringCompiler(map);
-
-            logger.debug(sc.c("{self.id} signals {simulcastLayers}"));
-        }
-    }
 }

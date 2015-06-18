@@ -19,6 +19,7 @@ import net.sf.fmj.media.rtp.*;
 import org.jitsi.impl.neomedia.rtp.translator.*;
 import org.jitsi.service.neomedia.*;
 import org.jitsi.service.neomedia.recording.*;
+import org.jitsi.service.neomedia.rtp.*;
 import org.jitsi.videobridge.*;
 
 import java.util.*;
@@ -26,7 +27,7 @@ import java.util.*;
 /**
  * @author George Politis
  */
-class SenderFeedbackExploder implements Transformer<RTCPCompoundPacket>
+class SenderFeedbackExploder implements RTCPPacketTransformer
 {
     private final AbstractBridgeRTCPTerminationStrategy strategy;
 
@@ -40,7 +41,6 @@ class SenderFeedbackExploder implements Transformer<RTCPCompoundPacket>
         this.strategy = strategy;
     }
 
-    @Override
     public RTCPCompoundPacket reverseTransform(RTCPCompoundPacket inPacket)
     {
         // Call the super method that:
@@ -75,7 +75,6 @@ class SenderFeedbackExploder implements Transformer<RTCPCompoundPacket>
     /**
      * {@inheritDoc}
      */
-    @Override
     public void close()
     {
         // nothing to be done here
@@ -84,7 +83,6 @@ class SenderFeedbackExploder implements Transformer<RTCPCompoundPacket>
     /**
      * {@inheritDoc}
      */
-    @Override
     public RTCPCompoundPacket transform(RTCPCompoundPacket inPacket)
     {
         return inPacket;
@@ -251,10 +249,11 @@ class SenderFeedbackExploder implements Transformer<RTCPCompoundPacket>
                             VideoChannel destVideoChannel
                                     = (VideoChannel) destChannel;
 
-                            destIsReceiving
-                                    = destVideoChannel.getSimulcastManager().accept(
-                                    ssrc,
-                                    srcVideoChannel);
+                            destIsReceiving = destVideoChannel
+                                    .getSimulcastManager().accept(ssrc,
+                                            srcVideoChannel
+                                                    .getSimulcastManager()
+                                                    .getSimulcastSender());
                         }
                     }
 

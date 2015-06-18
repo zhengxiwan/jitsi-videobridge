@@ -17,6 +17,8 @@ package org.jitsi.videobridge.simulcast;
 
 /**
 * Created by gp on 16/10/14.
+ *
+ * TODO move to libjitsi
 */
 public class SimulcastReceiverOptions
 {

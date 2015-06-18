@@ -17,7 +17,7 @@ package org.jitsi.videobridge.rtcp;
 
 import net.sf.fmj.media.rtp.*;
 import org.jitsi.impl.neomedia.rtcp.*;
-import org.jitsi.service.neomedia.*;
+import org.jitsi.service.neomedia.rtp.*;
 
 import java.util.*;
 
@@ -28,7 +28,7 @@ import java.util.*;
  * @author Boris Grozev
  */
 public class NACKNotifier
-        implements Transformer<RTCPCompoundPacket>
+    implements RTCPPacketTransformer
 {
     /**
      * The handler to use for intercepted NACK packets.

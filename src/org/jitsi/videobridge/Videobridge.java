@@ -856,10 +856,9 @@ public class Videobridge
                                     SortedSet<SimulcastLayer> layers
                                         = SimulcastLayersFactory
                                             .fromSourceGroups(
-                                                    sourceGroups,
-                                                    manager);
+                                                    sourceGroups);
 
-                                    manager.setSimulcastLayers(layers);
+                                    manager.getSimulcastSender().setSimulcastLayers(layers);
                                 }
 
                                 Integer receivingSimulcastLayer
@@ -873,6 +872,11 @@ public class Videobridge
                                     // stages of simulcast development and it is
                                     // no longer required.
                                 }
+
+                                SimulcastMode simulcastMode
+                                        = channelIQ.getSimulcastMode();
+                                if (simulcastMode != null)
+                                    videoChannel.setSimulcastMode(simulcastMode);
                             }
 
                             if (channelBundleId != null)

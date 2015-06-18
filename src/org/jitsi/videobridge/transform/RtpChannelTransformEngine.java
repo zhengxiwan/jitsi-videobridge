@@ -17,7 +17,7 @@ package org.jitsi.videobridge.transform;
 
 import org.jitsi.impl.neomedia.transform.*;
 import org.jitsi.service.configuration.*;
-import org.jitsi.service.neomedia.*;
+import org.jitsi.service.neomedia.rtp.*;
 import org.jitsi.util.*;
 import org.jitsi.videobridge.*;
 import org.jitsi.videobridge.rtcp.*;
@@ -98,6 +98,11 @@ public class RtpChannelTransformEngine
     private RetransmissionRequester retransmissionRequester;
 
     /**
+     * The transformer which handles SSRC rewriting.
+     */
+    private SsrcRewritingEngine ssrcRewrite;
+
+    /**
      * Initializes a new <tt>RtpChannelTransformEngine</tt> for a specific
      * <tt>RtpChannel</tt>.
      * @param channel the <tt>RtpChannel</tt>.
@@ -148,6 +153,13 @@ public class RtpChannelTransformEngine
                     = !cfg.getBoolean(DISABLE_NACK_TERMINATION_PNAME, false);
         }
 
+        if (channel instanceof VideoChannel)
+        {
+            VideoChannel videoChannel = (VideoChannel) channel;
+            ssrcRewrite = new SsrcRewritingEngine(videoChannel);
+            transformerList.add(ssrcRewrite);
+        }
+
         if (enableNackTermination && channel instanceof NACKHandler)
         {
             logger.info("Enabling NACK termination for channel "
@@ -165,7 +177,7 @@ public class RtpChannelTransformEngine
             // doesn't have to find the source Channel by SSRC.
             nackNotifier = new NACKNotifier((NACKHandler) channel);
             rtcpTransformEngine
-                    = new RTCPTransformEngine(new Transformer[] {nackNotifier});
+                    = new RTCPTransformEngine(new RTCPPacketTransformer[] {nackNotifier});
             transformerList.add(rtcpTransformEngine);
         }
 
@@ -194,6 +206,12 @@ public class RtpChannelTransformEngine
             redFilter.setEnabled(enabled);
     }
 
+    public void enableSsrcRewriting(boolean enabled)
+    {
+        if (ssrcRewrite != null)
+            ssrcRewrite.setEnabled(enabled);
+    }
+
     /**
      * Returns the cache of outgoing packets.
      * @return the cache of outgoing packets.
@@ -212,5 +230,9 @@ public class RtpChannelTransformEngine
     public boolean retransmissionsRequestsEnabled()
     {
         return retransmissionRequester != null;
+    }
+    public boolean isSsrcRewritingEnabled()
+    {
+        return ssrcRewrite.isEnabled();
     }
 }

@@ -268,7 +268,8 @@ public class BitrateController
             {
                 VideoChannel vc = (VideoChannel) channel;
                 SimulcastManager peerSM = vc.getSimulcastManager();
-                if (mySM != null && peerSM != null && peerSM.hasLayers())
+                if (mySM != null && peerSM != null
+                        && peerSM.getSimulcastSender().hasLayers())
                 {
                     bitrate += mySM.getIncomingBitrate(peerSM, true);
                 }

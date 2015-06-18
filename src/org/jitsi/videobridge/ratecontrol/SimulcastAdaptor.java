@@ -54,7 +54,7 @@ public class SimulcastAdaptor
         SimulcastManager mySM = channel.getSimulcastManager();
         if (mySM != null)
         {
-            if (mySM.override(SimulcastManager
+            if (mySM.override(SimulcastLayer
                     .SIMULCAST_LAYER_ORDER_NO_OVERRIDE))
             {
                 if (logger.isDebugEnabled())
@@ -89,7 +89,7 @@ public class SimulcastAdaptor
         if (mySM != null)
         {
             if (mySM.override(
-                    SimulcastManager.SIMULCAST_LAYER_ORDER_LQ))
+                    SimulcastLayer.SIMULCAST_LAYER_ORDER_LQ))
             {
 
                 if (logger.isDebugEnabled())

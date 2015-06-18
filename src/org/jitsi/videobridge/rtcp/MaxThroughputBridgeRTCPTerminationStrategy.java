@@ -69,7 +69,7 @@ public class MaxThroughputBridgeRTCPTerminationStrategy
             long time)
     {
         SortedSet<SimulcastLayer> layers
-            = videoChannel.getSimulcastManager().getSimulcastLayers();
+            = videoChannel.getSimulcastManager().getSimulcastSender().getSimulcastLayers();
         List<RTCPReportBlock> receiverReports
             = new ArrayList<RTCPReportBlock>(layers.size());
 
@@ -254,12 +254,12 @@ public class MaxThroughputBridgeRTCPTerminationStrategy
     {
         logger.warn("This RTCP termination strategy is deprecated and should" +
                 "not be used!");
-        setTransformerChain(new Transformer[]{
+        setTransformerChain(new RTCPPacketTransformer[]{
                 transformer
         });
     }
 
-    Transformer<RTCPCompoundPacket> transformer = new Transformer<RTCPCompoundPacket>()
+    RTCPPacketTransformer transformer = new RTCPPacketTransformer()
     {
         @Override
         public RTCPCompoundPacket reverseTransform(RTCPCompoundPacket inPacket)

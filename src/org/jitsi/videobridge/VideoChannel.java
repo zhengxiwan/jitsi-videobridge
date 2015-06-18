@@ -201,7 +201,9 @@ public class VideoChannel
             // for the high quality stream and it needs to be notified when
             // the channel has accepted a datagram packet for the timeout to
             // function correctly.
-            simulcastManager.acceptedDataInputStreamDatagramPacket(p);
+            simulcastManager.getSimulcastSender()
+                    .acceptedDataInputStreamDatagramPacket(
+                            p.getData(), p.getOffset(), p.getLength());
         }
 
         return accept;
@@ -250,6 +252,10 @@ public class VideoChannel
         super.describe(iq);
 
         iq.setLastN(lastN);
+
+        SimulcastMode simulcastMode = transformEngine.isSsrcRewritingEnabled()
+                ? SimulcastMode.REWRITING : SimulcastMode.SWITCHING;
+        iq.setSimulcastMode(simulcastMode);
     }
 
     /**
@@ -415,13 +421,11 @@ public class VideoChannel
             {
                 private int ix = 0;
 
-                @Override
                 public boolean hasNext()
                 {
                     return ix <= lastIx;
                 }
 
-                @Override
                 public Endpoint next()
                 {
                     if (hasNext())
@@ -430,7 +434,6 @@ public class VideoChannel
                         throw new NoSuchElementException();
                 }
 
-                @Override
                 public void remove()
                 {
                     throw new UnsupportedOperationException();
@@ -701,9 +704,9 @@ public class VideoChannel
                 VideoChannel videoChannel = (VideoChannel) source;
 
                 accept
-                    = simulcastManager.accept(
-                            buffer, offset, length,
-                            videoChannel);
+                    = simulcastManager.accept(buffer, offset, length,
+                            videoChannel.getSimulcastManager()
+                                    .getSimulcastSender());
             }
         }
 
@@ -1231,7 +1234,6 @@ public class VideoChannel
      * TODO: consider doing this in a separate thread, as it might slow down
      * the receiving RTCP thread.
      */
-    @Override
     public void handleNACK(NACKPacket nackPacket)
     {
         Set<Integer> lostPackets = new HashSet<Integer>();
@@ -1355,5 +1357,11 @@ public class VideoChannel
     private RawPacket createPacketForRetransmission(RawPacket pkt)
     {
         return pkt;
+    }
+
+    public void setSimulcastMode(SimulcastMode simulcastMode)
+    {
+        boolean enableSsrcRewriting = simulcastMode == SimulcastMode.REWRITING;
+        transformEngine.enableSsrcRewriting(enableSsrcRewriting);
     }
 }

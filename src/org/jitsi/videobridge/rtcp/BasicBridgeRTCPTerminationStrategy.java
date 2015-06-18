@@ -45,7 +45,7 @@ public class BasicBridgeRTCPTerminationStrategy
      */
     public BasicBridgeRTCPTerminationStrategy()
     {
-        setTransformerChain(new Transformer[]{
+        setTransformerChain(new RTCPPacketTransformer[]{
                 new REMBNotifier(this),
                 new ReceiverFeedbackFilter(),
                 new SenderFeedbackExploder(this)

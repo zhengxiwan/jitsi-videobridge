@@ -18,12 +18,13 @@ package org.jitsi.videobridge.rtcp;
 import net.sf.fmj.media.rtp.*;
 import org.jitsi.impl.neomedia.rtcp.*;
 import org.jitsi.service.neomedia.*;
+import org.jitsi.service.neomedia.rtp.*;
 import org.jitsi.videobridge.*;
 
 /**
  * @author George Politis
  */
-class REMBNotifier implements Transformer<RTCPCompoundPacket>
+class REMBNotifier implements RTCPPacketTransformer
 {
     private AbstractBridgeRTCPTerminationStrategy strategy;
 
