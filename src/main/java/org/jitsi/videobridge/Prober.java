@@ -54,6 +54,12 @@ public class Prober
     private final VideoChannel vc;
 
     /**
+     * The maximum transmission unit (MTU) to be assumed by
+     * {@code Prober}.
+     */
+    private static final int MTU = 1024 + 256;
+
+    /**
      *
      */
     private final ScheduledExecutorService scheduler =
@@ -95,7 +101,7 @@ public class Prober
             - vc.getStream().getMediaStreamStats().getSendingBitrate();
 
         // Calculate how many bytes to send at each probing interval.
-        final int bytes = (int) ((paddingBitrateBps * RATE_MS) / 8 / 1000);
+        final long bytes = (paddingBitrateBps * RATE_MS) / 8 / 1000;
 
         logger.info("Probing bytes=" + bytes
             + ", rate=" + RATE_MS + ", period=" + WINDOW_MS);
@@ -112,31 +118,49 @@ public class Prober
                     return;
                 }
 
-                // Build and send an appropriate padding packet.
-                byte[] buf = new byte[bytes];
-                RawPacket probe = new RawPacket(buf, 0, bytes);
+                int cntFatPackets = (int) (bytes / MTU);
+                int szNormalPacket = (int) (bytes % MTU);
 
-                // Setup the padding packet.
-                probe.setVersion();
-                probe.setPadding(bytes - RTPHeader.SIZE);
-                probe.setMarker(true);
-                probe.setPayloadType((byte) 0x64 /* dirty VP8 */);
-                probe.setSSRC(0xffffffff);
-                probe.setSequenceNumber(1);
-                probe.setTimestamp(1);
-                RtxTransformer rtxTransformer
-                    = vc.getTransformEngine().getRtxTransformer();
+                for (int i = 0; i < cntFatPackets - 1; i++)
+                {
+                    sendPadding(MTU);
+                }
 
-                TransformEngine after
-                    = (vc.getStream().getPacketCache() instanceof TransformEngine)
-                    ? (TransformEngine) vc.getStream().getPacketCache()
-                    : rtxTransformer;
-                rtxTransformer.retransmit(probe, after);
+                sendPadding(szNormalPacket);
             }
         };
 
         this.scheduledFuture = scheduler.scheduleAtFixedRate(
             r, 0 , RATE_MS, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     *
+     * @param length
+     */
+    private void sendPadding(int length)
+    {
+        // Build and send an appropriate padding packet.
+        byte[] buf = new byte[length];
+        RawPacket probe = new RawPacket(buf, 0, length);
+
+        // Setup the padding packet.
+
+        probe.setVersion();
+        probe.setPadding(length - RTPHeader.SIZE);
+        probe.setMarker(false);
+        probe.setPayloadType((byte) 0x64 /* dirty VP8 */);
+        probe.setSSRC(0xffffffff);
+        probe.setSequenceNumber(1);
+        probe.setTimestamp(1);
+        RtxTransformer rtxTransformer
+            = vc.getTransformEngine().getRtxTransformer();
+
+        TransformEngine after
+            = (vc.getStream().getPacketCache() instanceof TransformEngine)
+            ? (TransformEngine) vc.getStream().getPacketCache()
+            : rtxTransformer;
+        rtxTransformer.retransmit(probe, after);
     }
 
     /**
