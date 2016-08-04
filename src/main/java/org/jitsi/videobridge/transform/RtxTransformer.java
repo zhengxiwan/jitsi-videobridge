@@ -16,6 +16,8 @@
 package org.jitsi.videobridge.transform;
 
 import java.util.*;
+
+import net.sf.fmj.media.rtp.*;
 import org.jitsi.impl.neomedia.*;
 import org.jitsi.impl.neomedia.transform.*;
 import org.jitsi.service.neomedia.*;
@@ -237,6 +239,44 @@ public class RtxTransformer
         }
         return -1;
     }
+
+    /**
+     *
+     * @param length
+     */
+    public boolean transmitPadding(int length)
+    {
+        // Build and send an appropriate padding packet.
+        byte[] buf = new byte[length];
+        RawPacket probe = new RawPacket(buf, 0, length);
+
+        // Setup the padding packet.
+        probe.setVersion();
+        probe.setPadding(length - RTPHeader.SIZE);
+        probe.setMarker(false);
+        probe.setTimestamp(1);
+
+        TransformEngine after
+            = (channel.getStream().getPacketCache() instanceof TransformEngine)
+            ? (TransformEngine) channel.getStream().getPacketCache()
+            : this;
+
+        Long firstRtxSsrc;
+        synchronized (rtxSequenceNumbers)
+        {
+            if (rtxSequenceNumbers.size() != 0)
+            {
+                firstRtxSsrc = rtxSequenceNumbers.keySet().iterator().next();
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        return transmit(probe, firstRtxSsrc, after);
+    }
+
     /**
      * Retransmits a packet to {@link #channel}. If the destination supports
      * the RTX format, the packet will be encapsulated in RTX, otherwise, the
@@ -334,6 +374,20 @@ public class RtxTransformer
                          newBuf, headerLength + 2,
                          payloadLength );
 
+
+        return transmit(rtxPkt, rtxSsrc, after);
+    }
+
+    /**
+     *
+     * @param rtxPkt
+     * @param rtxSsrc
+     * @param after
+     * @return
+     */
+    private boolean transmit(
+        RawPacket rtxPkt, long rtxSsrc, TransformEngine after)
+    {
         MediaStream mediaStream = channel.getStream();
         if (mediaStream != null)
         {
@@ -345,9 +399,9 @@ public class RtxTransformer
             try
             {
                 mediaStream.injectPacket(
-                        rtxPkt,
+                    rtxPkt,
                         /* data */ true,
-                        after);
+                    after);
             }
             catch (TransmissionFailedException tfe)
             {

@@ -15,13 +15,9 @@
  */
 package org.jitsi.videobridge;
 
-import net.sf.fmj.media.rtp.*;
-import org.jitsi.impl.neomedia.*;
-import org.jitsi.impl.neomedia.transform.*;
 import org.jitsi.util.*;
 import org.jitsi.videobridge.transform.*;
 
-import java.util.*;
 import java.util.concurrent.*;
 
 /**
@@ -121,46 +117,20 @@ public class Prober
                 int cntFatPackets = (int) (bytes / MTU);
                 int szNormalPacket = (int) (bytes % MTU);
 
+                RtxTransformer rtxTransformer
+                    = vc.getTransformEngine().getRtxTransformer();
+
                 for (int i = 0; i < cntFatPackets - 1; i++)
                 {
-                    sendPadding(MTU);
+                    rtxTransformer.transmitPadding(MTU);
                 }
 
-                sendPadding(szNormalPacket);
+                rtxTransformer.transmitPadding(szNormalPacket);
             }
         };
 
         this.scheduledFuture = scheduler.scheduleAtFixedRate(
             r, 0 , RATE_MS, TimeUnit.MILLISECONDS);
-    }
-
-    /**
-     *
-     * @param length
-     */
-    private void sendPadding(int length)
-    {
-        // Build and send an appropriate padding packet.
-        byte[] buf = new byte[length];
-        RawPacket probe = new RawPacket(buf, 0, length);
-
-        // Setup the padding packet.
-
-        probe.setVersion();
-        probe.setPadding(length - RTPHeader.SIZE);
-        probe.setMarker(false);
-        probe.setPayloadType((byte) 0x64 /* dirty VP8 */);
-        probe.setSSRC(0xffffffff);
-        probe.setSequenceNumber(1);
-        probe.setTimestamp(1);
-        RtxTransformer rtxTransformer
-            = vc.getTransformEngine().getRtxTransformer();
-
-        TransformEngine after
-            = (vc.getStream().getPacketCache() instanceof TransformEngine)
-            ? (TransformEngine) vc.getStream().getPacketCache()
-            : rtxTransformer;
-        rtxTransformer.retransmit(probe, after);
     }
 
     /**
